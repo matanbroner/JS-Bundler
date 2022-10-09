@@ -1,6 +1,4 @@
 mod builder;
-mod parser;
-use rslint_parser::{ast::IfStmt, parse_module, AstNode, SyntaxKind, SyntaxNodeExt};
 
 fn main() {
     println!("Hello, world!");

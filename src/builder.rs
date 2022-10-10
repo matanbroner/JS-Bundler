@@ -18,7 +18,6 @@ fn new_module(file_path: &String) -> Module {
         .to_str()
         .unwrap()
         .to_string();
-    println!("creating module from: {abs_path}");
     let contents = fs::read_to_string(file_path).expect("error reading");
     let imports = parse_module_imports(&contents);
     let mut mods = Vec::new();
@@ -30,6 +29,7 @@ fn new_module(file_path: &String) -> Module {
             None => panic!("cannot convert path to string"),
         }
     }
+    println!("module complete: {abs_path}");
     return Module {
         file_path: abs_path,
         module_content: contents,
@@ -128,13 +128,15 @@ fn add_runtime(module_map: &String, entry_point: &String) -> String {
 
 pub fn build(entry_file: &String, output_folder: &String) -> () {
     let graph = create_dependency_graph(&entry_file);
-    // println!("{:?}", graph);
+    println!("dependency graph generated");
     let (file_name, code) = bundle(graph);
+    println!("bundle generated");
     // create the full path
     let path = Path::new(output_folder).join(file_name);
     let mut file = fs::File::create(path).expect("error creating output path");
     file.write_all(code.as_bytes())
         .expect("error writing to output file");
+    println!("bundle write complete");
 }
 
 // Helpers

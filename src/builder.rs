@@ -1,5 +1,5 @@
 use path_absolutize::*;
-use rslint_parser::{parse_module, SyntaxKind};
+use rslint_parser::{parse_module, parse_module_lossy, SyntaxKind, SyntaxNode};
 use std::fs;
 use std::io::prelude::*;
 use std::path::Path;
@@ -13,11 +13,11 @@ struct Module {
 
 fn new_module(file_path: &String) -> Module {
     let abs_path = Path::new(file_path)
-    .absolutize()
-    .unwrap()
-    .to_str()
-    .unwrap()
-    .to_string();
+        .absolutize()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
     println!("creating module from: {abs_path}");
     let contents = fs::read_to_string(file_path).expect("error reading");
     let imports = parse_module_imports(&contents);
@@ -56,8 +56,8 @@ fn create_dependency_graph(entry_file: &String) -> Module {
 }
 
 fn bundle(graph: Module) -> (String, String) {
-    let modules = collect_modules(graph);
-    let module_map = to_module_map(&modules);
+    let mut modules = collect_modules(graph);
+    let module_map = to_module_map(&mut modules);
     let module_code = add_runtime(&module_map, &modules.first().unwrap().file_path);
     return (String::from("bundle.js"), module_code);
 }
@@ -77,10 +77,10 @@ fn collect_modules(graph: Module) -> Vec<Module> {
     return mods;
 }
 
-fn to_module_map(modules: &Vec<Module>) -> String {
+fn to_module_map(modules: &mut Vec<Module>) -> String {
     let mut module_map = String::from("{");
-    for module in modules {
-        transform_module_interface(&module);
+    for module in modules.iter_mut() {
+        transform_module_interface(module);
         module_map.push_str(
             &format!(
                 "\"{}\": function(exports, require) {{  {} }},",
@@ -144,10 +144,7 @@ pub fn build(entry_file: &String, output_folder: &String) -> () {
 // TODO: fix
 fn parse_module_imports(content: &String) -> Vec<String> {
     let mut sources = Vec::new();
-    let parse = parse_module(content, 0);
-    let mut syntax_node = parse.syntax().first_child();
-    loop {
-        let mut _node = syntax_node.unwrap();
+    let mut _iter = |_node: &SyntaxNode| -> bool {
         if _node.kind() == SyntaxKind::IMPORT_DECL {
             let mut _import_node = _node.first_child();
             'import: loop {
@@ -165,14 +162,104 @@ fn parse_module_imports(content: &String) -> Vec<String> {
                 }
             }
         }
+        return true;
+    };
+    parse_iterate_module(content, &mut _iter);
+    return sources;
+}
+
+fn transform_module_interface(module: &mut Module) {
+    // need toi copy since closure changes module
+    let mod_copy = copy_module(&module);
+    let mut _iter = |_node: &SyntaxNode| -> bool {
+        if _node.kind() == SyntaxKind::IMPORT_DECL {
+            let mut _import_node = _node.first_child();
+            'import: loop {
+                while let Some(_in) = _import_node {
+                    // _in.text_range()
+                    // import a from "b"
+                    // straight from name to literal, no need to change
+                    match _in.kind() {
+                        SyntaxKind::LITERAL => {
+                            let src = _in
+                                .text()
+                                .to_string()
+                                .replace(&['\'', '\"', ' ', '\t'][..], "")
+                                .to_owned();
+                            let abs_path = Path::new(&module.file_path)
+                                .join(src)
+                                .absolutize()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                                .to_string();
+                            let var_name = _in.prev_sibling().unwrap().text().to_string();
+                            let new_stmt =
+                                format!("const {} = require(\"{}\");", var_name, abs_path);
+                            module.module_content = module
+                                .module_content
+                                .replace(&_node.text().to_string(), &new_stmt);
+                            //println!("{:?}", &module.module_content[..]);
+                            break 'import;
+                        }
+                        // import a, {b, c} from "d"
+                        // or
+                        // import {b, c} from "d"
+                        SyntaxKind::NAMED_IMPORTS => {
+                            let mut vars = _in.text().to_string().replace(&['{', '}'][..], "");
+                            if let Some(v) = _in.prev_sibling() {
+                                let mut new_var = String::from("default: ");
+                                new_var.push_str(&v.text().to_string());
+                                new_var.push_str(&format!(",{}", vars));
+                                vars = new_var;
+                            }
+                            let src = _in
+                                .next_sibling()
+                                .unwrap()
+                                .text()
+                                .to_string()
+                                .replace(&['\'', '\"', ' ', '\t'][..], "")
+                                .to_owned();
+                            let abs_path = Path::new(&module.file_path)
+                                .join(src)
+                                .absolutize()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                                .to_string();
+                            let new_stmt = format!(
+                                "const {{{}}} = require(\"{}\");",
+                                vars, abs_path
+                            );
+                            module.module_content = module
+                                .module_content
+                                .replace(&_node.text().to_string(), &new_stmt);
+                            println!("{:?}", &module.module_content[..]);
+                            break 'import;
+                        }
+                        _ => _import_node = _in.next_sibling(),
+                    }
+                }
+                break 'import;
+            }
+        }
+        return true;
+    };
+    parse_iterate_module(&mod_copy.module_content.to_string(), &mut _iter);
+}
+
+fn parse_iterate_module<F: FnMut(&SyntaxNode) -> bool>(content: &String, cb: &mut F) -> () {
+    let parse = parse_module(content, 0);
+    let mut syntax_node = parse.syntax().first_child();
+    loop {
+        let mut _node = syntax_node.unwrap();
+        let cont = cb(&_node);
+        if !cont {
+            break;
+        }
         syntax_node = match _node.next_sibling() {
             Some(next) => Some(next),
             _ => break,
         }
     }
-    return sources;
-}
-
-fn transform_module_interface(module: &Module) {
-    
 }

@@ -15,14 +15,21 @@ const modules = {
 ## Handled Use Cases
 
  - [X] Transforms relative imports to `require` statements
-ex. `import area from "../square" -> const { default: area} = require("../square");`
-ex. `import area, { anotherFn } from "../square" -> const { default: area, anotherFn} = require("../square");`
+ ```Javascript
+ ex.
+ import area from "../square" -> const { default: area} = require("../square");
+ import area, { anotherFn } from "../square" -> const { default: area, anotherFn} = require("../square");
+ ```
  - [X] Transforms exports to module exports
-ex. `export default area -> exports.default = area`
-ex. `export const area = _area -> exports.area = _area`
-ex. `export { area } -> exports.area = area`
+ ```Javascript
+ export default area -> exports.default = area;
+ export const area = _area -> exports.area = _area;
+ export { area } -> exports.area = area;
+ ```
 - [ ] NodeJS modules imports
-ex. `import express from "express"`
+```Javascript
+import express from "express"
+```
 - [ ] "Rollup" style bundling
 - [ ] Bundle beautifier after generating
 ## To Run

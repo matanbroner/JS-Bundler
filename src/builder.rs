@@ -168,25 +168,27 @@ fn parse_module_imports(content: &String) -> Vec<String> {
     return sources;
 }
 
+// converts commonjs imports to require, exports to module exports
 fn transform_module_interface(module: &mut Module) {
-    // need toi copy since closure changes module
+    // need to copy since closure changes module
     let mod_copy = copy_module(&module);
     let mut _iter = |_node: &SyntaxNode| -> bool {
         if _node.kind() == SyntaxKind::IMPORT_DECL {
             let mut _import_node = _node.first_child();
             'import: loop {
                 while let Some(_in) = _import_node {
-                    // _in.text_range()
-                    // import a from "b"
-                    // straight from name to literal, no need to change
                     match _in.kind() {
                         SyntaxKind::LITERAL => {
+                            // import a from "b"
+                            // straight from name to literal, no need to change
                             let src = _in
                                 .text()
                                 .to_string()
                                 .replace(&['\'', '\"', ' ', '\t'][..], "")
                                 .to_owned();
                             let abs_path = Path::new(&module.file_path)
+                                .parent()
+                                .unwrap()
                                 .join(src)
                                 .absolutize()
                                 .unwrap()
@@ -195,11 +197,10 @@ fn transform_module_interface(module: &mut Module) {
                                 .to_string();
                             let var_name = _in.prev_sibling().unwrap().text().to_string();
                             let new_stmt =
-                                format!("const {} = require(\"{}\");", var_name, abs_path);
+                                format!("const {{default: {}}} = require(\"{}\");", var_name, abs_path);
                             module.module_content = module
                                 .module_content
                                 .replace(&_node.text().to_string(), &new_stmt);
-                            //println!("{:?}", &module.module_content[..]);
                             break 'import;
                         }
                         // import a, {b, c} from "d"
@@ -221,20 +222,19 @@ fn transform_module_interface(module: &mut Module) {
                                 .replace(&['\'', '\"', ' ', '\t'][..], "")
                                 .to_owned();
                             let abs_path = Path::new(&module.file_path)
+                                .parent()
+                                .unwrap()
                                 .join(src)
                                 .absolutize()
                                 .unwrap()
                                 .to_str()
                                 .unwrap()
                                 .to_string();
-                            let new_stmt = format!(
-                                "const {{{}}} = require(\"{}\");",
-                                vars, abs_path
-                            );
+                            let new_stmt =
+                                format!("const {{{}}} = require(\"{}\");", vars, abs_path);
                             module.module_content = module
                                 .module_content
                                 .replace(&_node.text().to_string(), &new_stmt);
-                            println!("{:?}", &module.module_content[..]);
                             break 'import;
                         }
                         _ => _import_node = _in.next_sibling(),
@@ -242,6 +242,66 @@ fn transform_module_interface(module: &mut Module) {
                 }
                 break 'import;
             }
+        } else if _node.kind() == SyntaxKind::EXPORT_DECL {
+            // export { name }
+            // or
+            // export const name = obj;
+            let mut _export_node = _node.first_child();
+            'export: loop {
+                while let Some(_en) = _export_node {
+                    match _en.kind() {
+                        SyntaxKind::EXPORT_NAMED => {
+                            // export { name }
+                            let vars_str = _en.text().to_string().replace(&['{', '}'][..], "");
+                            let vars = vars_str.split(",");
+                            let mut new_stmt = String::from("");
+                            for var in vars {
+                                let var_trim = var.replace(&[' ', ';'][..], "");
+                                new_stmt.push_str(
+                                    &format!("exports.{} = {};\n", var_trim, var_trim)[..],
+                                );
+                            }
+                            module.module_content = module
+                                .module_content
+                                .replace(&_node.text().to_string(), &new_stmt);
+                            break 'export;
+                        }
+                        SyntaxKind::VAR_DECL => {
+                            // export const name = obj;
+                            let mut new_stmt = String::from("");
+                            let stmt = _en
+                                .text()
+                                .to_string()
+                                .replace(&[' ', ';'][..], "")
+                                .replace("let", "")
+                                .replace("const", "")
+                                .replace("var", "");
+                            let decls = stmt.split(",");
+                            for decl in decls {
+                                let mut decl_split = decl.split("=");
+                                let (name, value) =
+                                    (decl_split.next().unwrap(), decl_split.next().unwrap());
+                                new_stmt.push_str(&format!("exports.{} = {};\n", name, value)[..]);
+                            }
+                            module.module_content = module
+                                .module_content
+                                .replace(&_node.text().to_string(), &new_stmt);
+                            break 'export;
+                        }
+                        _ => _export_node = _en.next_sibling(),
+                    }
+                }
+                break 'export;
+            }
+        } else if _node.kind() == SyntaxKind::EXPORT_DEFAULT_EXPR {
+            // export default name
+            let var = _node.first_child().unwrap().text();
+            let new_stmt = String::from(format!("exports.default = {};\n", var));
+            module.module_content = module
+                .module_content
+                .replace(&_node.text().to_string(), &new_stmt);
+        } else {
+            // println!("{:?}", _node);
         }
         return true;
     };

@@ -4,7 +4,7 @@ A Rust based toy bundler for Javascript
 
 Currently performs a "webpack" style bundling process that condenses all modules into a single file that provides a module dictionary that grants each module a `require` and `exports` object.
 
-```
+```Javascript
 ex. 
 const modules = {
 	"modA": (require, exports) => {...},

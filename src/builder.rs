@@ -1,5 +1,5 @@
 use path_absolutize::*;
-use rslint_parser::{parse_module, parse_module_lossy, SyntaxKind, SyntaxNode};
+use rslint_parser::{parse_module, SyntaxKind, SyntaxNode};
 use std::fs;
 use std::io::prelude::*;
 use std::path::Path;

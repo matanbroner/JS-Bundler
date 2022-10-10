@@ -44,6 +44,7 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 name = "bundler"
 version = "0.1.0"
 dependencies = [
+ "npm_rs",
  "path-absolutize",
  "rslint_parser",
 ]
@@ -124,6 +125,15 @@ name = "libc"
 version = "0.2.134"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "329c933548736bc49fd575ee68c89e8be4d260064184389a5b77517cddd99ffb"
+
+[[package]]
+name = "npm_rs"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f664b3447458ff1c5fee7043990271072bccbd1300f151b2ae84fb461b442824"
+dependencies = [
+ "cfg-if",
+]
 
 [[package]]
 name = "num-bigint"

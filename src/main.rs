@@ -2,6 +2,8 @@ mod builder;
 
 use std::env;
 
+pub const NPM: &'static str = "npm";
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 || (args.len() == 1 && &args[1] == "-h") {
